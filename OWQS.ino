@@ -9,9 +9,8 @@
 #define MODEM_TX             27
 #define MODEM_RX             26
 
-#define I2C_SDA              21
-#define I2C_SCL              22
-
+//// Set serial for monitor (to monitor)
+#define SerialMon Serial
 //// Set serial for AT commands (to SIM800 module)
 #define SerialAT Serial1
 
@@ -20,13 +19,24 @@
 #define TINY_GSM_RX_BUFFER   1024   // Set RX buffer to 1Kb
 
 // - Temperature
-#define OWQS_ONEWIRE_BUS 4          //  OneWire bus pin
+#define OWQS_ONEWIRE_BUS 18         //  OneWire bus pin
 
 // - pH
 #define PH_ADC_PIN 34               //  pH sensor pin - TODO: substitute the pin
 
 // - Turbidity
 #define NTU_ADC_PIN 35              //  Turbidity sensor pin - TODO: substitute the pin
+
+// - InfluxDB
+#define INFLUXDB_HOST     "INSERT_YOURS"        // InfluxDB v2 server host
+#define INFLUXDB_PORT     "INSERT_YOURS"        // InfluxDB v2 server port
+#define INFLUXDB_ORG      "INSERT_YOURS"        // InfluxDB v2 organization id
+#define INFLUXDB_BUCKET   "INSERT_YOURS"        // InfluxDB v2 bucket name
+#define INFLUXDB_TOKEN    "INSERT_YOURS"
+
+// - Deep Sleep
+#define uS_TO_S_FACTOR 1000000     // Conversion factor for micro seconds to seconds
+#define TIME_TO_SLEEP  1800        // Time ESP32 will go to sleep (in seconds) 1800 seconds = 30 minutes
 
 
 
@@ -47,7 +57,10 @@
 // NONE
 
 // - InfluxDB
-// TODO
+#include <InfluxDbClient.h>
+
+// - Watchdog
+#include "esp_task_wdt.h"
 
 
 /****************************************/
@@ -56,6 +69,15 @@
 // - GSM
 TinyGsm modem(SerialAT);
 TinyGsmClient client(modem);
+// HttpClient http(client, INFLUXDB_HOST, INFLUXDB_PORT);
+
+// Connection
+const char apn[]          = "iot.1nce.net"; // APN
+const char gprsUsr[]      = ""; // GPRS User
+const char gprsPwd[]      = ""; // GPRS Password
+
+// SIM card PIN (leave empty, if not defined)
+const char simPIN[]   = ""; 
 
 
 // - Temperature
@@ -65,13 +87,15 @@ DallasTemperature tempSensor(&oneWire);       // DS18B20 sensor
 float temperature;                            // Temperature measurement (°C)
 
 // - pH
-float pH_voltage;                             // pH ADC voltage measurement
-float pH_value;                               // pH measurement
+float pH;                                     // pH measurement
 
 
-// - Torbidity 
-float ntu_voltage;                             // NTU ADC voltage measurement
+// - Turbidity 
+float ntu;                                    // NTU measurement
 
+// - InfluxDB
+//// Measurement point
+Point sensors("TODO");
 
 
 /****************************************/
@@ -80,26 +104,214 @@ float ntu_voltage;                             // NTU ADC voltage measurement
 
 void setup() {
   // Start the Serial Monitor
-  Serial.begin(115200);
+  SerialMon.begin(115200);
+  SerialMon.println("Waking up...");
+
+  /* INITIALIZE WATCHDOG */
+  // WatchDog config
+  esp_task_wdt_config_t config = {
+    .timeout_ms = 120 * 1000,    //  20 secondi
+    .trigger_panic = true,     // Trigger panic == reset della CPU (reboot)
+  };
+  esp_task_wdt_reconfigure(&config);
+
+  /* INITIALIZE GSM MODULE */
+  // Set modem reset, enable, power pins
+  pinMode(MODEM_PWKEY, OUTPUT);
+  pinMode(MODEM_RST, OUTPUT);
+  pinMode(MODEM_POWER_ON, OUTPUT);
+  digitalWrite(MODEM_PWKEY, LOW);
+  digitalWrite(MODEM_RST, HIGH);
+  digitalWrite(MODEM_POWER_ON, HIGH);
+
+  // Set GSM module baud rate and UART pins
+  SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
+  delay(3000);
+
+  // Restart SIM800 module, it takes quite some time
+  // To skip it, call init() instead of restart()
+  SerialMon.println("Initializing modem...");
+  //// modem.restart();
+  modem.init();
+  //// use modem.init() if you don't need the complete restart
+
+  // Unlock your SIM card with a PIN if needed
+  if (strlen(simPIN) && modem.getSimStatus() != 3 ) {
+    modem.simUnlock(simPIN);
+  }
   
+
+
+
+  /* INITIALIZE DS18B20 SENSOR */
   // Start the DS18B20 sensor
   tempSensor.begin();
+
+  /* INITIALIZE INFLUXDB */
+  // sensors.addTag("YOUR_TAG", "YOUR_TAG_VALUE");
+  // sensors.addTag("YOUR_TAG", "YOUR_TAG_VALUE");
+  // sensors.addTag("YOUR_TAG", "YOUR_TAG_VALUE");
+
+  /* INITIALIZE DEEP SLEEP */
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+
+  /* RUN APP */
+  app_main();
 }
 
 
+
+/****************************************/
+/*          Utility Functions           */
+/****************************************/
+
+void owqs_connect_modem() {
+  SerialMon.print("Connecting to APN: ");
+  SerialMon.print(apn);
+  if (!modem.gprsConnect(apn, gprsUsr, gprsPwd)) {
+    SerialMon.println(" fail");
+    
+    while(1);   // To trigger the watchdog
+  } else {
+    SerialMon.println(" OK");
+  }
+}
+
+// Connect client
+void owqs_connect_client() {
+  SerialMon.print("Connecting to server: ");
+  SerialMon.print(INFLUXDB_HOST);
+  if (!client.connect(INFLUXDB_HOST, INFLUXDB_PORT)) {
+    SerialMon.println(" fail");
+    
+    while(1);   // To trigger the watchdog
+  } else {
+    SerialMon.println(" OK");
+  }
+}
+
+// Shutdown modem
+void owqs_shutdown_modem() {
+  // Disconnect client
+  SerialMon.println("Disconnecting client...");
+  client.stop();
+
+  // Disconnect modem
+  SerialMon.println("Disconnecting modem...");
+  modem.gprsDisconnect();
+
+  // Logging
+  SerialMon.println("Module shutdown completed");
+}
+
+// Read temperature
+float owqs_read_temp() {
+  tempSensor.requestTemperatures(); 
+  return tempSensor.getTempCByIndex(0);
+}
+
+// Read pH
+float owqs_read_pH() {
+  // pH ADC voltage measurement
+  float voltage;
+
+  // pH measurement
+  float pH_value = 7.0; // Tmp
+
+  // TODO
+
+  return pH_value;
+}
+
+// Read turbidity
+float owqs_read_ntu() {
+  // NTU ADC voltage measurement
+  float ntu_voltage;
+  float ntu_value = 1234.0;
+
+  // TODO
+
+  return ntu_value; // Tmp
+}
+
+void owqs_send_data() {
+  // Build data point
+  sensors.clearFields();
+  sensors.addField("temperature", temperature);
+  sensors.addField("pH", pH);
+  sensors.addField("turbidity", ntu);
+  
+  // Connect client
+  owqs_connect_client();
+  
+  // Logging
+  SerialMon.print("Writing: ");
+  SerialMon.println(sensors.toLineProtocol());
+
+  // Build POST request
+  String payload = sensors.toLineProtocol() + " ";
+
+  String httpRequest = "";
+  httpRequest += String("POST ") + "/api/v2/write?org=" + INFLUXDB_ORG + "&bucket=" + INFLUXDB_BUCKET + " HTTP/1.1\r\n";
+  httpRequest += String("Host: ") + INFLUXDB_HOST + "\r\n";// ":" + INFLUXDB_PORT + "\r\n";
+  httpRequest += "Content-Type: text/plain; charset=utf-8\r\n";
+  httpRequest += String("Authorization: Token ") + INFLUXDB_TOKEN + "\r\n";
+  httpRequest += "Accept: application/json\r\n";
+  httpRequest += String("Content-Length: ") + payload.length();
+  httpRequest += "\r\n";
+  httpRequest += "\r\n";
+  httpRequest += payload;
+  httpRequest += "\r\n";
+
+  // Logging
+  SerialMon.println("________________________________");
+  SerialMon.println(httpRequest);
+  SerialMon.println("________________________________");
+
+  // Send the data
+  client.print(httpRequest);
+
+  // Debugging
+  // unsigned long timeout = millis();
+  // while (client.connected() && millis() - timeout < 5000L) {
+  //   // Print available data (HTTP response from server)
+  //   while (client.available()) {
+  //     char c = client.read();
+  //     SerialMon.print(c);
+  //     timeout = millis();
+  //   }
+  // }
+}
 
 
 /****************************************/
 /*                  App                 */
 /****************************************/
 
-void loop() {
-  tempSensor.requestTemperatures(); 
-  float temperatureC = tempSensor.getTempCByIndex(0);
-  float temperatureF = tempSensor.getTempFByIndex(0);
-  Serial.print(temperatureC);
-  Serial.println("ºC");
-  Serial.print(temperatureF);
-  Serial.println("ºF");
-  delay(5000);
+void app_main() {
+  SerialMon.println("[OWQS] APP START");
+
+  // Connect the modem
+  owqs_connect_modem();
+
+  // Read temperature
+  temperature = owqs_read_temp();
+  // Read pH
+  pH = owqs_read_pH();
+  // Read turbidity
+  ntu = owqs_read_ntu();
+
+  // Send data
+  owqs_send_data();
+
+  // Shutdown SIM800L module
+  owqs_shutdown_modem();
+
+  // Enter deep sleep
+  SerialMon.println("Entering in deep sleep...");
+  esp_deep_sleep_start();
 }
+
+
+
+void loop() { /* Useless */ }
