@@ -28,11 +28,7 @@
 #define NTU_ADC_PIN 35              //  Turbidity sensor pin - TODO: substitute the pin
 
 // - InfluxDB
-#define INFLUXDB_HOST     "INSERT_YOURS"        // InfluxDB v2 server host
-#define INFLUXDB_PORT     "INSERT_YOURS"        // InfluxDB v2 server port
-#define INFLUXDB_ORG      "INSERT_YOURS"        // InfluxDB v2 organization id
-#define INFLUXDB_BUCKET   "INSERT_YOURS"        // InfluxDB v2 bucket name
-#define INFLUXDB_TOKEN    "INSERT_YOURS"
+//// Secrets
 
 // - Deep Sleep
 #define uS_TO_S_FACTOR 1000000     // Conversion factor for micro seconds to seconds
@@ -58,6 +54,7 @@
 
 // - InfluxDB
 #include <InfluxDbClient.h>
+#include "secret.h"
 
 // - Watchdog
 #include "esp_task_wdt.h"
@@ -79,20 +76,21 @@ const char gprsPwd[]      = ""; // GPRS Password
 const char simPIN[]   = ""; 
 
 // - Temperature
-OneWire oneWire(OWQS_ONEWIRE_BUS);            // OneWire bus
-DallasTemperature tempSensor(&oneWire);       // DS18B20 sensor
+OneWire oneWire(OWQS_ONEWIRE_BUS);              // OneWire bus
+DallasTemperature temperatureSensor(&oneWire);  // DS18B20 sensor
 
-float temperature;                            // Temperature measurement (°C)
+float temperature;                              // Temperature measurement (°C)
 
 // - pH
-float pH;                                     // pH measurement
+DFRobot_PH phSensor;                            // Gavity pH sensor
+float pH;                                       // pH measurement
 
 // - Turbidity 
-float ntu;                                    // NTU measurement
+float ntu;                                      // NTU measurement
 
 // - InfluxDB
 //// Measurement point
-Point sensors("TODO");
+Point sensors(SCRT_INFLUXDB_MEASUREMENT);
 
 
 /****************************************/
@@ -107,7 +105,7 @@ void setup() {
   /* INITIALIZE WATCHDOG */
   // WatchDog config
   esp_task_wdt_config_t config = {
-    .timeout_ms = 300 * 1000,     // 5 minutes
+    .timeout_ms = 120 * 1000,     // 2 minutes
     .trigger_panic = true,        // Trigger panic
   };
   esp_task_wdt_reconfigure(&config);
@@ -140,14 +138,17 @@ void setup() {
 
 
 
-  /* INITIALIZE DS18B20 SENSOR */
+  /* INITIALIZE SENSORS */
   // Start the DS18B20 sensor
-  tempSensor.begin();
+  temperatureSensor.begin();
+  
+  // Start the Gravity pH sensor
+  phSensor.begin();
 
   /* INITIALIZE INFLUXDB */
-  // sensors.addTag("YOUR_TAG", "YOUR_TAG_VALUE");
-  // sensors.addTag("YOUR_TAG", "YOUR_TAG_VALUE");
-  // sensors.addTag("YOUR_TAG", "YOUR_TAG_VALUE");
+  sensors.addTag(SCRT_INFLUXDB_TAG1_KEY, SCRT_INFLUXDB_TAG1_VAL);
+  sensors.addTag(SCRT_INFLUXDB_TAG2_KEY, SCRT_INFLUXDB_TAG2_VAL);
+  sensors.addTag(SCRT_INFLUXDB_TAG3_KEY, SCRT_INFLUXDB_TAG3_VAL);
 
   /* INITIALIZE DEEP SLEEP */
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
@@ -177,8 +178,8 @@ void owqs_connect_modem() {
 // Connect client
 void owqs_connect_client() {
   SerialMon.print("Connecting to server: ");
-  SerialMon.print(INFLUXDB_HOST);
-  if (!client.connect(INFLUXDB_HOST, INFLUXDB_PORT)) {
+  SerialMon.print(SCRT_INFLUXDB_HOST);
+  if (!client.connect(SCRT_INFLUXDB_HOST, SCRT_INFLUXDB_PORT)) {
     SerialMon.println(" fail");
     
     while(1);   // To trigger the watchdog
@@ -203,21 +204,22 @@ void owqs_shutdown_modem() {
 
 // Read temperature
 float owqs_read_temp() {
-  tempSensor.requestTemperatures(); 
-  return tempSensor.getTempCByIndex(0);
+  temperatureSensor.requestTemperatures(); 
+  return temperatureSensor.getTempCByIndex(0);
 }
 
 // Read pH
 float owqs_read_pH() {
-  // pH ADC voltage measurement
-  float voltage;
+  // Read the sensor voltage (mV)
+  float voltage = analogRead(PH_ADC_PIN) * (3300.0 / 4096.0);
+  
+  // Convert voltage into pH w/ temperature compensation
+  float phValue = phSensor.readPH(voltage, temperature);
 
-  // pH measurement
-  float pH_value = 7.0; // Tmp
+  // Calibrate the sensor
+  phSensor.calibration(voltage, temperature);
 
-  // TODO
-
-  return pH_value;
+  return phValue;
 }
 
 // Read turbidity
@@ -249,10 +251,10 @@ void owqs_send_data() {
   String payload = sensors.toLineProtocol() + " ";
 
   String httpRequest = "";
-  httpRequest += String("POST ") + "/api/v2/write?org=" + INFLUXDB_ORG + "&bucket=" + INFLUXDB_BUCKET + " HTTP/1.1\r\n";
-  httpRequest += String("Host: ") + INFLUXDB_HOST + "\r\n";// ":" + INFLUXDB_PORT + "\r\n";
+  httpRequest += String("POST ") + "/api/v2/write?org=" + SCRT_INFLUXDB_ORG + "&bucket=" + SCRT_INFLUXDB_BUCKET + " HTTP/1.1\r\n";
+  httpRequest += String("Host: ") + SCRT_INFLUXDB_HOST + "\r\n";// ":" + INFLUXDB_PORT + "\r\n";
   httpRequest += "Content-Type: text/plain; charset=utf-8\r\n";
-  httpRequest += String("Authorization: Token ") + INFLUXDB_TOKEN + "\r\n";
+  httpRequest += String("Authorization: Token ") + SCRT_INFLUXDB_TOKEN + "\r\n";
   httpRequest += "Accept: application/json\r\n";
   httpRequest += String("Content-Length: ") + payload.length();
   httpRequest += "\r\n";
