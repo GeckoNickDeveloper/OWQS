@@ -69,7 +69,6 @@
 // - GSM
 TinyGsm modem(SerialAT);
 TinyGsmClient client(modem);
-// HttpClient http(client, INFLUXDB_HOST, INFLUXDB_PORT);
 
 // Connection
 const char apn[]          = "iot.1nce.net"; // APN
@@ -79,7 +78,6 @@ const char gprsPwd[]      = ""; // GPRS Password
 // SIM card PIN (leave empty, if not defined)
 const char simPIN[]   = ""; 
 
-
 // - Temperature
 OneWire oneWire(OWQS_ONEWIRE_BUS);            // OneWire bus
 DallasTemperature tempSensor(&oneWire);       // DS18B20 sensor
@@ -88,7 +86,6 @@ float temperature;                            // Temperature measurement (°C)
 
 // - pH
 float pH;                                     // pH measurement
-
 
 // - Turbidity 
 float ntu;                                    // NTU measurement
@@ -110,8 +107,8 @@ void setup() {
   /* INITIALIZE WATCHDOG */
   // WatchDog config
   esp_task_wdt_config_t config = {
-    .timeout_ms = 120 * 1000,    //  20 secondi
-    .trigger_panic = true,     // Trigger panic == reset della CPU (reboot)
+    .timeout_ms = 300 * 1000,     // 5 minutes
+    .trigger_panic = true,        // Trigger panic
   };
   esp_task_wdt_reconfigure(&config);
 
