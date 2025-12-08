@@ -1,6 +1,9 @@
 /****************************************/
 /*                DEFINES               */
 /****************************************/
+// - System
+#define SYS_PWR_PIN          19
+
 // - GSM
 //// TTGO T-Call pins
 #define MODEM_PWKEY          4
@@ -98,9 +101,18 @@ Point sensors(SCRT_INFLUXDB_MEASUREMENT);
 /****************************************/
 
 void setup() {
+  /* INITIALIZE SERIAL */
   // Start the Serial Monitor
   SerialMon.begin(115200);
   SerialMon.println("Waking up...");
+
+  /* INITIALIZE SYSTEM */
+  // Power up the sensors (3.3V)
+  pinMode(SYS_PWR_PIN, OUTPUT);
+  digitalWrite(SYS_PWR_PIN, HIGH);
+
+  // 1 minute sleep to fully power up the sensors (specifically pH)
+  //delay(60 * 1000);
 
   /* INITIALIZE WATCHDOG */
   // WatchDog config
@@ -133,8 +145,7 @@ void setup() {
   // Unlock your SIM card with a PIN if needed
   if (strlen(simPIN) && modem.getSimStatus() != 3 ) {
     modem.simUnlock(simPIN);
-  }
-  
+  }  
 
 
 
@@ -198,8 +209,22 @@ void owqs_shutdown_modem() {
   SerialMon.println("Disconnecting modem...");
   modem.gprsDisconnect();
 
+  // Power down the module
+  digitalWrite(MODEM_PWKEY, LOW);
+  digitalWrite(MODEM_RST, LOW);
+  digitalWrite(MODEM_POWER_ON, LOW);
+
   // Logging
   SerialMon.println("Module shutdown completed");
+}
+
+// Power down sensors
+void owqs_shutdown_system() {
+  // Power down the sensors
+  digitalWrite(SYS_PWR_PIN, LOW);
+
+  // Logging
+  SerialMon.println("System shutdown completed");
 }
 
 // Read temperature
