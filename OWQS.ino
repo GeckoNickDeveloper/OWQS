@@ -34,8 +34,7 @@
 //// Secrets
 
 // - Deep Sleep
-#define uS_TO_S_FACTOR 1000000     // Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP  1800        // Time ESP32 will go to sleep (in seconds) 1800 seconds = 30 minutes
+#define TIME_TO_SLEEP  1800         // Time ESP32 will go to sleep (in seconds) 1800 seconds = 30 minutes
 
 
 
@@ -85,97 +84,35 @@ DallasTemperature temperatureSensor(&oneWire);  // DS18B20 sensor
 float temperature;                              // Temperature measurement (°C)
 
 // - pH
-DFRobot_PH phSensor;                            // Gavity pH sensor
+DFRobot_PH phSensor;                            // Gavity pH sensor /* TODO: remove */
 float pH;                                       // pH measurement
 
 // - Turbidity 
-float ntu;                                      // NTU measurement
+float turbidity;                                // NTU measurement
 
 // - InfluxDB
 //// Measurement point
-Point sensors(SCRT_INFLUXDB_MEASUREMENT);
+
 
 
 /****************************************/
 /*                 Setup                */
 /****************************************/
 
-void setup() {
-  /* INITIALIZE SERIAL */
-  // Start the Serial Monitor
-  SerialMon.begin(115200);
-  SerialMon.println("Waking up...");
-
-  /* INITIALIZE SYSTEM */
-  // Power up the sensors (3.3V)
-  pinMode(SYS_PWR_PIN, OUTPUT);
-  digitalWrite(SYS_PWR_PIN, HIGH);
-
-  // 1 minute sleep to fully power up the sensors (specifically pH)
-  //delay(60 * 1000);
-
-  /* INITIALIZE WATCHDOG */
-  // WatchDog config
-  esp_task_wdt_config_t config = {
-    .timeout_ms = 120 * 1000,     // 2 minutes
-    .trigger_panic = true,        // Trigger panic
-  };
-  esp_task_wdt_reconfigure(&config);
-
-  /* INITIALIZE GSM MODULE */
-  // Set modem reset, enable, power pins
-  pinMode(MODEM_PWKEY, OUTPUT);
-  pinMode(MODEM_RST, OUTPUT);
-  pinMode(MODEM_POWER_ON, OUTPUT);
-  digitalWrite(MODEM_PWKEY, LOW);
-  digitalWrite(MODEM_RST, HIGH);
-  digitalWrite(MODEM_POWER_ON, HIGH);
-
-  // Set GSM module baud rate and UART pins
-  SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
-  delay(3000);
-
-  // Restart SIM800 module, it takes quite some time
-  // To skip it, call init() instead of restart()
-  SerialMon.println("Initializing modem...");
-  //// modem.restart();
-  modem.init();
-  //// use modem.init() if you don't need the complete restart
-
-  // Unlock your SIM card with a PIN if needed
-  if (strlen(simPIN) && modem.getSimStatus() != 3 ) {
-    modem.simUnlock(simPIN);
-  }  
-
-
-
-  /* INITIALIZE SENSORS */
-  // Start the DS18B20 sensor
-  temperatureSensor.begin();
-  
-  // Start the Gravity pH sensor
-  phSensor.begin();
-
-  /* INITIALIZE INFLUXDB */
-  sensors.addTag(SCRT_INFLUXDB_TAG1_KEY, SCRT_INFLUXDB_TAG1_VAL);
-  sensors.addTag(SCRT_INFLUXDB_TAG2_KEY, SCRT_INFLUXDB_TAG2_VAL);
-  sensors.addTag(SCRT_INFLUXDB_TAG3_KEY, SCRT_INFLUXDB_TAG3_VAL);
-
-  /* INITIALIZE DEEP SLEEP */
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-
-  /* RUN APP */
-  app_main();
-}
-
+void setup() { app_main(); }
+void loop() { /* Useless */ }
 
 
 /****************************************/
 /*          Utility Functions           */
 /****************************************/
 
-void owqs_connect_modem() {
-  SerialMon.print("Connecting to APN: ");
+/***************************/
+/*    Network Functions    */
+/***************************/
+
+void owqs_net_connect_modem() {
+  SerialMon.print("[OWQS] Connecting to APN: ");
   SerialMon.print(apn);
   if (!modem.gprsConnect(apn, gprsUsr, gprsPwd)) {
     SerialMon.println(" fail");
@@ -186,9 +123,15 @@ void owqs_connect_modem() {
   }
 }
 
-// Connect client
-void owqs_connect_client() {
-  SerialMon.print("Connecting to server: ");
+void owqs_net_disconnect_modem() {
+  SerialMon.print("[OWQS] Disconnecting modem...");
+  modem.gprsDisconnect();
+}
+
+
+
+void owqs_net_connect_client() {
+  SerialMon.print("[OWQS] Connecting to server: ");
   SerialMon.print(SCRT_INFLUXDB_HOST);
   if (!client.connect(SCRT_INFLUXDB_HOST, SCRT_INFLUXDB_PORT)) {
     SerialMon.println(" fail");
@@ -199,74 +142,29 @@ void owqs_connect_client() {
   }
 }
 
-// Shutdown modem
-void owqs_shutdown_modem() {
-  // Disconnect client
-  SerialMon.println("Disconnecting client...");
+void owqs_net_disconnect_client() {
+  SerialMon.print("[OWQS] Disconnecting client...");
   client.stop();
-
-  // Disconnect modem
-  SerialMon.println("Disconnecting modem...");
-  modem.gprsDisconnect();
-
-  // Power down the module
-  digitalWrite(MODEM_PWKEY, LOW);
-  digitalWrite(MODEM_RST, LOW);
-  digitalWrite(MODEM_POWER_ON, LOW);
-
-  // Logging
-  SerialMon.println("Module shutdown completed");
 }
 
-// Power down sensors
-void owqs_shutdown_system() {
-  // Power down the sensors
-  digitalWrite(SYS_PWR_PIN, LOW);
 
-  // Logging
-  SerialMon.println("System shutdown completed");
-}
 
-// Read temperature
-float owqs_read_temp() {
-  temperatureSensor.requestTemperatures(); 
-  return temperatureSensor.getTempCByIndex(0);
-}
-
-// Read pH
-float owqs_read_pH() {
-  // Read the sensor voltage (mV)
-  float voltage = analogRead(PH_ADC_PIN) * (3300.0 / 4096.0);
-  
-  // Convert voltage into pH w/ temperature compensation
-  float phValue = phSensor.readPH(voltage, temperature);
-
-  // Calibrate the sensor
-  phSensor.calibration(voltage, temperature);
-
-  return phValue;
-}
-
-// Read turbidity
-float owqs_read_ntu() {
-  // NTU ADC voltage measurement
-  float ntu_voltage;
-  float ntu_value = 1234.0;
-
-  // TODO
-
-  return ntu_value; // Tmp
-}
-
-void owqs_send_data() {
+void owqs_net_send_data() {
   // Build data point
+  Point sensors(SCRT_INFLUXDB_MEASUREMENT);
+
+  sensors.clearTags();
+  sensors.addTag(SCRT_INFLUXDB_TAG1_KEY, SCRT_INFLUXDB_TAG1_VAL);
+  sensors.addTag(SCRT_INFLUXDB_TAG2_KEY, SCRT_INFLUXDB_TAG2_VAL);
+  sensors.addTag(SCRT_INFLUXDB_TAG3_KEY, SCRT_INFLUXDB_TAG3_VAL);
+
   sensors.clearFields();
   sensors.addField("temperature", temperature);
   sensors.addField("pH", pH);
   sensors.addField("turbidity", ntu);
   
   // Connect client
-  owqs_connect_client();
+  owqs_net_connect_client();
   
   // Logging
   SerialMon.print("Writing: ");
@@ -308,34 +206,182 @@ void owqs_send_data() {
 }
 
 
-/****************************************/
-/*                  App                 */
-/****************************************/
 
-void app_main() {
-  SerialMon.println("[OWQS] APP START");
+/***************************/
+/*    Sensors Functions    */
+/***************************/
+
+float owqs_sensors_read_temperature() { 
+  temperatureSensor.requestTemperatures(); 
+  return temperatureSensor.getTempCByIndex(0);
+}
+
+float owqs_sensors_read_ph(float temperature) {
+  float voltage = analogRead(PH_ADC_PIN) * (3300.0 / 4096.0); // in mV
+  
+  /* TODO */
+  return 0.0;
+}
+
+float owqs_sensors_read_turbidity() {
+  float voltage = analogRead(NTU_ADC_PIN) * (3.3 / 4096.0); // in V
+  return voltage;
+}
+
+
+
+void owqs_sensors_acquire_all() {
+  // Read temperature
+  temperature = owqs_sensors_read_temperature();
+  
+  // Read pH with temperature compensation
+  pH = owqs_sensors_read_ph(temperature);
+
+  // Read turbidity
+  turbidity = owqs_sensors_read_turbidity();
+}
+
+
+
+/***************************/
+/*      Init Functions     */
+/***************************/
+
+void owqs_init_network() {
+  SerialMon.println("[OWQS] Initializing network");
+
+  // Set modem reset, enable, power pins
+  pinMode(MODEM_PWKEY, OUTPUT);
+  pinMode(MODEM_RST, OUTPUT);
+  pinMode(MODEM_POWER_ON, OUTPUT);
+  digitalWrite(MODEM_PWKEY, LOW);
+  digitalWrite(MODEM_RST, HIGH);
+  digitalWrite(MODEM_POWER_ON, HIGH);
+
+  // Set GSM module baud rate and UART pins
+  SerialAT.begin(115200, SERIAL_8N1, MODEM_RX, MODEM_TX);
+  delay(3000);
+
+  // Restart SIM800 module, it takes quite some time
+  // To skip it, call init() instead of restart()
+  //// modem.restart();
+  modem.init();
+  //// use modem.init() if you don't need the complete restart
+
+  // Unlock your SIM card with a PIN if needed
+  if (strlen(simPIN) && modem.getSimStatus() != 3 ) {
+    modem.simUnlock(simPIN);
+  }
+
+
 
   // Connect the modem
-  owqs_connect_modem();
+  owqs_net_connect_modem();
+}
 
-  // Read temperature
-  temperature = owqs_read_temp();
-  // Read pH
-  pH = owqs_read_pH();
-  // Read turbidity
-  ntu = owqs_read_ntu();
+void owqs_init_watchdog() {
+  // WatchDog config
+  esp_task_wdt_config_t config = {
+    .timeout_ms = 120 * 1000,     // 2 minutes
+    .trigger_panic = true,        // Trigger panic
+  };
 
-  // Send data
-  owqs_send_data();
+  // Configure watchdog
+  esp_task_wdt_reconfigure(&config);
+}
 
-  // Shutdown SIM800L module
-  owqs_shutdown_modem();
+void owqs_init_sensors() {
+  // Power up the sensors (3.3V)
+  SerialMon.println("[OWQS] Initializing sensors...");
+  pinMode(SYS_PWR_PIN, OUTPUT);
+  digitalWrite(SYS_PWR_PIN, HIGH);
+
+  // Start the DS18B20 sensor
+  temperatureSensor.begin();
+
+  // 1 minute sleep to fully power up the sensors (specifically pH)
+  delay(60 * 1000);
+}
+
+void owqs_init_deepsleep() {
+  // Enable deep sleep timer
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * 1000000);
+}
+
+
+
+void owqs_init() {
+  // Start the Serial Monitor
+  SerialMon.begin(115200);
+  SerialMon.println("[OWQS] Waking up...");
+
+  // Init sensors
+  owqs_init_sensors();
+  
+  // Init watchdog
+  owqs_init_watchdog();
+
+  // Init network
+  owqs_init_network();
+
+  // Init deep sleep
+  owqs_init_deepsleep();
+}
+
+
+
+/***************************/
+/*     Deinit Functions    */
+/***************************/
+
+void owqs_deinit_net() {
+  SerialMon.println("[OWQS] Deinit network");
+  // Disconnect client
+  owqs_net_disconnect_client();
+  // Disconnect modem
+  owqs_net_disconnect_modem();
+
+  // Power down the module
+  digitalWrite(MODEM_PWKEY, LOW);
+  digitalWrite(MODEM_RST, LOW);
+  digitalWrite(MODEM_POWER_ON, LOW);
+}
+
+void owqs_deinit_sensors() {
+  SerialMon.println("[OWQS] Deinit sensors");
+  digitalWrite(SYS_PWR_PIN, LOW);
+}
+
+void owqs_deinit() {
+  // Shutdown sensors
+  owqs_deinit_sensors();
+
+  // Shutdown modem
+  owqs_deinit_net();
+
+
 
   // Enter deep sleep
-  SerialMon.println("Entering in deep sleep...");
+  SerialMon.println("[OWQS] Entering in deep sleep...");
   esp_deep_sleep_start();
 }
 
 
 
-void loop() { /* Useless */ }
+/****************************************/
+/*                  App                 */
+/****************************************/
+
+void app_main() {
+  // Init
+  owqs_init();
+
+  // Read sensors
+  owqs_sensors_acquire_all();
+
+  // Send data
+  owqs_net_send_data();
+
+  // System deinit
+  owqs_deinit();
+}
