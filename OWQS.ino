@@ -44,7 +44,7 @@ TinyGsm modem(SerialAT);
 TinyGsmClient client(modem);
 
 // - Temperature
-OneWire oneWire(OWQS_ONEWIRE_BUS);              // OneWire bus
+OneWire oneWire(OWQS_GPIO_SENSOR_TEMPERATURE);  // OneWire bus
 DallasTemperature temperatureSensor(&oneWire);  // DS18B20 sensor
 
 // - Measurements
