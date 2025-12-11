@@ -88,10 +88,7 @@ DFRobot_PH phSensor;                            // Gavity pH sensor /* TODO: rem
 float pH;                                       // pH measurement
 
 // - Turbidity 
-float turbidity;                                // NTU measurement
-
-// - InfluxDB
-//// Measurement point
+float turbidity;                                // Turbidity measurement
 
 
 
@@ -161,7 +158,7 @@ void owqs_net_send_data() {
   sensors.clearFields();
   sensors.addField("temperature", temperature);
   sensors.addField("pH", pH);
-  sensors.addField("turbidity", ntu);
+  sensors.addField("turbidity", turbidity);
   
   // Connect client
   owqs_net_connect_client();
