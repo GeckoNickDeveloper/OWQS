@@ -6,27 +6,39 @@
 /****************************************/
 
 // Sensors' power-up
-#define OWQS_SENSORS_PWR                    19
+#define OWQS_SENSORS_PWR                19
 
 // Sensors
 //// Temperature
-#define OWQS_GPIO_SENSOR_TEMPERATURE        18
+#define OWQS_GPIO_SENSOR_TEMPERATURE    18
 
 //// pH
-#define OWQS_GPIO_SENSOR_PH                 34
+#define OWQS_GPIO_SENSOR_PH             34
 
 //// Turbidity
-#define OWQS_GPIO_SENSOR_TURBIDITY          35
+#define OWQS_GPIO_SENSOR_TURBIDITY      35
 
 
 
 // SIM Module
 //// ESP32 SIM800L v1.4
-#define OWQS_GPIO_MODEM_PWKEY               4
-#define OWQS_GPIO_MODEM_RST                 5
-#define OWQS_GPIO_MODEM_POWER_ON            23
-#define OWQS_GPIO_MODEM_TX                  27
-#define OWQS_GPIO_MODEM_RX                  26
+#define OWQS_GPIO_MODEM_PWKEY           4
+#define OWQS_GPIO_MODEM_RST             5
+#define OWQS_GPIO_MODEM_POWER_ON        23
+#define OWQS_GPIO_MODEM_TX              27
+#define OWQS_GPIO_MODEM_RX              26
+
+
+
+/****************************************/
+/*                Timers                */
+/****************************************/
+
+// Watchdog (s)
+#define OWQS_TIMER_WATCHDOG_S       120
+
+// Deep sleep (s)
+#define OWQS_TIMER_DEEP_SLEEP_S     1800
 
 
 
@@ -35,8 +47,8 @@
 /****************************************/
 
 // TinyGSM Library config
-#define TINY_GSM_MODEM_SIM800                       // Modem is SIM800
-#define TINY_GSM_RX_BUFFER                  1024    // Set RX buffer to 1Kb
+#define TINY_GSM_MODEM_SIM800               // Modem is SIM800
+#define TINY_GSM_RX_BUFFER          1024    // Set RX buffer to 1Kb
 
 
 
