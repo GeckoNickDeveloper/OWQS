@@ -6,7 +6,7 @@
 /****************************************/
 
 // Sensors' power-up
-#define OWQS_SENSORS_PWR                19
+#define OWQS_GPIO_SENSORS_PWR           19
 
 // Sensors
 //// Temperature
@@ -34,11 +34,14 @@
 /*                Timers                */
 /****************************************/
 
+// Sensors max warm-up time (s)
+#define OWQS_TIMER_SENSORS_WARM_UP_S    120
+
 // Watchdog (s)
-#define OWQS_TIMER_WATCHDOG_S       120
+#define OWQS_TIMER_WATCHDOG_S           10
 
 // Deep sleep (s)
-#define OWQS_TIMER_DEEP_SLEEP_S     1800
+#define OWQS_TIMER_DEEP_SLEEP_S         1800
 
 
 
