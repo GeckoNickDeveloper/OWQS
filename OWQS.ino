@@ -199,10 +199,20 @@ float owqs_sensors_read_temperature() {
 }
 
 float owqs_sensors_read_ph(float temperature) {
-  float voltage = analogRead(OWQS_GPIO_SENSOR_PH) * (3300.0 / 4096.0); // in mV
+  float voltage = analogRead(OWQS_GPIO_SENSOR_PH) * (3.3 / 4096.0); // in mV 
   
-  /* TODO */
-  return 0.0;
+  // Slope computed as:
+  // (pH14 - pH0) / (VpH14 - VpH0)
+  //   = (14 - 0) / (0 - 3.0)
+  //   = 14 / -3.0
+  //   = -4.6666667
+  float theoreticalSlope25 = -4.6666667f;
+
+  // Temperature compensation (requires Kelvins)
+  float temperatureCompensatedSlope = theoreticalSlope25 * ((temperature + 273.15) / 298.15);
+
+  // pH computation
+  return 7.0 + (voltage - 1.5) * temperatureCompensatedSlope;
 }
 
 float owqs_sensors_read_turbidity() {
