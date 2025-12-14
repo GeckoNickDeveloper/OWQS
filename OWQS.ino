@@ -106,7 +106,7 @@ void owqs_net_connect_modem() {
 }
 
 void owqs_net_disconnect_modem() {
-  SerialMon.print("[OWQS] Disconnecting modem...");
+  SerialMon.println("[OWQS] Disconnecting modem...");
   modem.gprsDisconnect();
 }
 
@@ -125,7 +125,7 @@ void owqs_net_connect_client() {
 }
 
 void owqs_net_disconnect_client() {
-  SerialMon.print("[OWQS] Disconnecting client...");
+  SerialMon.println("[OWQS] Disconnecting client...");
   client.stop();
 }
 
@@ -288,9 +288,9 @@ void owqs_sensors_acquire_all() {
   }
 
   // Average readings
-  avg_temperature = (s_temperature - min_temperature - max_temperature) / ((float) (OWQS_CONST_TOTAL_READINGS - 2))
-  avg_pH_voltage  = (s_pH_voltage - min_pH_voltage - max_pH_voltage) / ((float) (OWQS_CONST_TOTAL_READINGS - 2))
-  avg_turbidity   = (s_turbidity - min_turbidity - max_turbidity) / ((float) (OWQS_CONST_TOTAL_READINGS - 2))
+  avg_temperature = (s_temperature - min_temperature - max_temperature) / ((float) (OWQS_CONST_TOTAL_READINGS - 2));
+  avg_pH_voltage  = (s_pH_voltage - min_pH_voltage - max_pH_voltage) / ((float) (OWQS_CONST_TOTAL_READINGS - 2));
+  avg_turbidity   = (s_turbidity - min_turbidity - max_turbidity) / ((float) (OWQS_CONST_TOTAL_READINGS - 2));
 
 
   // Save results
