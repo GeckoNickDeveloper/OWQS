@@ -31,6 +31,17 @@
 
 
 /****************************************/
+/*              Constants               */
+/****************************************/
+
+// pH voltage compensation
+#define OWQS_CONST_PH_VCOMP             1.606           // Theoretical = 1.5
+// pH calibrated slope
+#define OWQS_CONST_PH_SLOPE             -5.233775297    // Theoretical = -4.666666667
+
+
+
+/****************************************/
 /*                Timers                */
 /****************************************/
 
