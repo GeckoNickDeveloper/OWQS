@@ -106,7 +106,7 @@ void owqs_net_connect_modem() {
 }
 
 void owqs_net_disconnect_modem() {
-  SerialMon.print("[OWQS] Disconnecting modem...");
+  SerialMon.println("[OWQS] Disconnecting modem...");
   modem.gprsDisconnect();
 }
 
@@ -125,7 +125,7 @@ void owqs_net_connect_client() {
 }
 
 void owqs_net_disconnect_client() {
-  SerialMon.print("[OWQS] Disconnecting client...");
+  SerialMon.println("[OWQS] Disconnecting client...");
   client.stop();
 }
 
@@ -198,21 +198,18 @@ float owqs_sensors_read_temperature() {
   return temperatureSensor.getTempCByIndex(0);
 }
 
-float owqs_sensors_read_ph(float temperature) {
-  float voltage = analogRead(OWQS_GPIO_SENSOR_PH) * (3.3 / 4096.0); // in mV 
-  
-  // Slope computed as:
-  // (pH14 - pH0) / (VpH14 - VpH0)
-  //   = (14 - 0) / (0 - 3.0)
-  //   = 14 / -3.0
-  //   = -4.6666667
-  float theoreticalSlope25 = -4.6666667f;
+float owqs_sensors_read_ph_voltage() {
+  float voltage = analogRead(OWQS_GPIO_SENSOR_PH) * (3.3 / 4096.0); // in V
 
+  return voltage;
+}
+
+float owqs_sensors_read_ph(float voltage, float temperature) {
   // Temperature compensation (requires Kelvins)
-  float temperatureCompensatedSlope = theoreticalSlope25 * ((temperature + 273.15) / 298.15);
+  float temperatureCompensatedSlope = OWQS_CONST_PH_SLOPE * ((temperature + 273.15) / 298.15);
 
   // pH computation
-  return 7.0 + (voltage - 1.5) * temperatureCompensatedSlope;
+  return 7.0 + (voltage - OWQS_CONST_PH_VCOMP) * temperatureCompensatedSlope;
 }
 
 float owqs_sensors_read_turbidity() {
@@ -223,14 +220,83 @@ float owqs_sensors_read_turbidity() {
 
 
 void owqs_sensors_acquire_all() {
-  // Read temperature
-  temperature = owqs_sensors_read_temperature();
+  // Temperature
+  float tmp_temperature;
+  float s_temperature   = 0.0;
+  float max_temperature = 0.0;
+  float min_temperature = 0.0;
+  float avg_temperature;
   
-  // Read pH with temperature compensation
-  pH = owqs_sensors_read_ph(temperature);
+  // pH voltage
+  float tmp_pH_voltage;
+  float s_pH_voltage    = 0.0;
+  float max_pH_voltage  = 0.0;
+  float min_pH_voltage  = 0.0;
+  float avg_pH_voltage;
+  
+  // Turbidity
+  float tmp_turbidity;
+  float s_turbidity     = 0.0;
+  float max_turbidity   = 0.0;
+  float min_turbidity   = 0.0;
+  float avg_turbidity;
 
-  // Read turbidity
-  turbidity = owqs_sensors_read_turbidity();
+
+  // Run readings
+  for (int i = 0; i < OWQS_CONST_TOTAL_READINGS; ++i) {
+    // Read sensors
+    tmp_temperature = owqs_sensors_read_temperature();
+    tmp_pH_voltage = owqs_sensors_read_ph_voltage();
+    tmp_turbidity = owqs_sensors_read_turbidity();
+
+    // Sum
+    s_temperature += tmp_temperature;
+    s_pH_voltage += tmp_pH_voltage;
+    s_turbidity += tmp_turbidity;
+
+    // Compute boundaries
+    //// Assign first value
+    if (i == 0) {
+      // Temperature
+      max_temperature = tmp_temperature;
+      min_temperature = tmp_temperature;
+
+      // pH voltage
+      max_pH_voltage = tmp_pH_voltage;
+      min_pH_voltage = tmp_pH_voltage;
+      
+      // Turbidity
+      max_turbidity = tmp_turbidity;
+      min_turbidity = tmp_turbidity;
+    }
+
+    // Temperature
+    max_temperature = (tmp_temperature >= max_temperature) ? tmp_temperature : max_temperature;
+    min_temperature = (tmp_temperature <= min_temperature) ? tmp_temperature : min_temperature;
+
+    // pH voltage
+    max_pH_voltage = (tmp_pH_voltage >= max_pH_voltage) ? tmp_pH_voltage : max_pH_voltage;
+    min_pH_voltage = (tmp_pH_voltage <= min_pH_voltage) ? tmp_pH_voltage : min_pH_voltage;
+    
+    // Turbidity
+    max_turbidity = (tmp_turbidity >= max_turbidity) ? tmp_turbidity : max_turbidity;
+    min_turbidity = (tmp_turbidity <= min_turbidity) ? tmp_turbidity : min_turbidity;
+
+
+
+    owqs_light_sleep(OWQS_TIMER_READINGS_DT_MS);
+  }
+
+  // Average readings
+  avg_temperature = (s_temperature - min_temperature - max_temperature) / ((float) (OWQS_CONST_TOTAL_READINGS - 2));
+  avg_pH_voltage  = (s_pH_voltage - min_pH_voltage - max_pH_voltage) / ((float) (OWQS_CONST_TOTAL_READINGS - 2));
+  avg_turbidity   = (s_turbidity - min_turbidity - max_turbidity) / ((float) (OWQS_CONST_TOTAL_READINGS - 2));
+
+
+  // Save results
+  temperature = avg_temperature;
+  pH = owqs_sensors_read_ph(avg_pH_voltage, avg_temperature);
+  temperature = avg_turbidity;
 }
 
 
