@@ -41,6 +41,11 @@
 
 
 
+// Totale readings to average
+#define OWQS_CONST_TOTAL_READINGS       10
+
+
+
 /****************************************/
 /*                Timers                */
 /****************************************/
@@ -53,6 +58,9 @@
 
 // Deep sleep (s)
 #define OWQS_TIMER_DEEP_SLEEP_S         1800
+
+// Sensors reading delays
+#define OWQS_TIMER_READINGS_DT_MS       1000
 
 
 
