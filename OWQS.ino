@@ -271,16 +271,16 @@ void owqs_sensors_acquire_all() {
     }
 
     // Temperature
-    max_temperature = (tmp_temperature >= max_temperature) ? tmp_temperature : max_temperature;
-    min_temperature = (tmp_temperature <= min_temperature) ? tmp_temperature : min_temperature;
+    max_temperature = (tmp_temperature > max_temperature) ? tmp_temperature : max_temperature;
+    min_temperature = (tmp_temperature < min_temperature) ? tmp_temperature : min_temperature;
 
     // pH voltage
-    max_pH_voltage = (tmp_pH_voltage >= max_pH_voltage) ? tmp_pH_voltage : max_pH_voltage;
-    min_pH_voltage = (tmp_pH_voltage <= min_pH_voltage) ? tmp_pH_voltage : min_pH_voltage;
+    max_pH_voltage = (tmp_pH_voltage > max_pH_voltage) ? tmp_pH_voltage : max_pH_voltage;
+    min_pH_voltage = (tmp_pH_voltage < min_pH_voltage) ? tmp_pH_voltage : min_pH_voltage;
     
     // Turbidity
-    max_turbidity = (tmp_turbidity >= max_turbidity) ? tmp_turbidity : max_turbidity;
-    min_turbidity = (tmp_turbidity <= min_turbidity) ? tmp_turbidity : min_turbidity;
+    max_turbidity = (tmp_turbidity > max_turbidity) ? tmp_turbidity : max_turbidity;
+    min_turbidity = (tmp_turbidity < min_turbidity) ? tmp_turbidity : min_turbidity;
 
 
 
@@ -296,7 +296,7 @@ void owqs_sensors_acquire_all() {
   // Save results
   temperature = avg_temperature;
   pH = owqs_sensors_read_ph(avg_pH_voltage, avg_temperature);
-  temperature = avg_turbidity;
+  turbidity = avg_turbidity;
 }
 
 
